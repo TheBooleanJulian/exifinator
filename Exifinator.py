@@ -5,6 +5,32 @@ from tkinter import filedialog
 from PIL import Image, ImageTk
 from PIL.ExifTags import TAGS, GPSTAGS
 import geopy.geocoders
+from fractions import Fraction
+
+def format_shutter_speed(speed):
+    """Convert shutter speed to human-readable format (fractions for < 1s)"""
+    if speed == "N/A":
+        return "N/A"
+    
+    try:
+        # Handle Fraction objects
+        if isinstance(speed, Fraction):
+            speed_value = float(speed)
+        else:
+            speed_value = float(speed)
+        
+        # For speeds below 1 second, express as 1/x
+        if speed_value < 1:
+            denominator = round(1 / speed_value)
+            return f"1/{denominator}"
+        else:
+            # For speeds >= 1 second, express as "x" or "x.x"
+            if speed_value == int(speed_value):
+                return f"{int(speed_value)}s"
+            else:
+                return f"{speed_value:.1f}s"
+    except (ValueError, TypeError, ZeroDivisionError):
+        return str(speed)
 
 def get_exif(image_path):
     with Image.open(image_path) as img:
@@ -42,7 +68,7 @@ def extract_basic_exif(image_path):
     if not exif:
         return "No EXIF data found."
     
-    shutter_speed = exif.get("ExposureTime", "N/A")
+    shutter_speed = format_shutter_speed(exif.get("ExposureTime", "N/A"))
     aperture = exif.get("FNumber", "N/A")
     iso = exif.get("ISOSpeedRatings", "N/A")
     camera_model = exif.get("Model", "N/A")
