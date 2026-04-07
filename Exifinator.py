@@ -102,6 +102,20 @@ def browse_file():
         display_exif(file_path)
 
 def display_exif(image_path):
+    global current_image_path, thumbnail_label
+    
+    # Load and display thumbnail
+    try:
+        img = Image.open(image_path)
+        img.thumbnail((200, 200), Image.Resampling.LANCZOS)
+        photo = ImageTk.PhotoImage(img)
+        thumbnail_label.config(image=photo)
+        thumbnail_label.image = photo  # Keep a reference
+        current_image_path = image_path
+    except Exception as e:
+        thumbnail_label.config(text=f"❌ Error loading thumbnail\n{str(e)}")
+    
+    # Display EXIF data
     exif_text = extract_basic_exif(image_path)
     text_var.set(exif_text)
     text_box.delete("1.0", tk.END)
@@ -112,10 +126,11 @@ def copy_to_clipboard():
     pyperclip.copy(text)
 
 def create_gui():
-    global text_var, text_box
+    global text_var, text_box, thumbnail_label, current_image_path
+    current_image_path = None
     root = tk.Tk()
     root.title("✦ Exifinator")
-    root.geometry("600x700")
+    root.geometry("850x750")
     root.resizable(True, True)
     
     # TheBooleanJulian Branding Colors
@@ -150,51 +165,72 @@ def create_gui():
     )
     subtitle_label.pack()
     
-    # Image Preview/Browse Area
-    frame = tk.Frame(root, width=560, height=180, bg=BG_CARD, relief=tk.FLAT, borderwidth=2)
-    frame.pack(pady=20, padx=20, fill=tk.BOTH, expand=False)
+    # Main Content Frame (Thumbnail + EXIF Data side by side)
+    content_frame = tk.Frame(root, bg=BG_DARK)
+    content_frame.pack(pady=15, padx=20, fill=tk.BOTH, expand=True)
     
-    label = tk.Label(
-        frame,
-        text="🖼️  Click to Browse Image\n(JPG, PNG, TIFF, BMP)",
-        wraplength=450,
-        font=("Courier New", 12),
+    # Thumbnail Section
+    thumbnail_section = tk.Frame(content_frame, bg=BG_DARK)
+    thumbnail_section.pack(side=tk.LEFT, fill=tk.BOTH, expand=False, padx=(0, 15))
+    
+    thumbnail_title = tk.Label(
+        thumbnail_section,
+        text="🖼️ Preview",
+        font=("Courier New", 11, "bold"),
+        bg=BG_DARK,
+        fg=TEAL_PRIMARY
+    )
+    thumbnail_title.pack(pady=(0, 10))
+    
+    # Thumbnail Display
+    thumbnail_frame = tk.Frame(thumbnail_section, width=220, height=220, bg=BG_CARD, relief=tk.FLAT, borderwidth=2)
+    thumbnail_frame.pack(fill=tk.BOTH, expand=False)
+    thumbnail_frame.pack_propagate(False)
+    
+    thumbnail_label = tk.Label(
+        thumbnail_frame,
+        text="📤 Click or Browse\nto load image",
+        font=("Courier New", 10),
         bg=BG_CARD,
         fg=TEAL_PRIMARY,
         relief=tk.FLAT
     )
-    label.pack(expand=True)
+    thumbnail_label.pack(expand=True)
     
-    frame.bind("<Button-1>", lambda e: browse_file())
-    label.bind("<Button-1>", lambda e: browse_file())
+    thumbnail_frame.bind("<Button-1>", lambda e: browse_file())
+    thumbnail_label.bind("<Button-1>", lambda e: browse_file())
+    
+    # Right Section (EXIF Data)
+    right_section = tk.Frame(content_frame, bg=BG_DARK)
+    right_section.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
     
     # EXIF Data Display
     data_label = tk.Label(
-        root,
+        right_section,
         text="📊 EXIF Data:",
-        font=("Courier New", 12, "bold"),
+        font=("Courier New", 11, "bold"),
         bg=BG_DARK,
         fg=TEAL_PRIMARY
     )
-    data_label.pack(anchor=tk.W, padx=20, pady=(10, 5))
+    data_label.pack(anchor=tk.W, pady=(0, 8))
     
     text_var = tk.StringVar()
     text_box = tk.Text(
-        root,
-        height=15,
+        right_section,
+        height=16,
         wrap=tk.WORD,
         bg=BG_CARD,
         fg=TEXT_WHITE,
-        font=("Courier New", 9),
+        font=("Courier New", 8),
         borderwidth=1,
         relief=tk.FLAT,
         insertbackground=TEAL_PRIMARY
     )
-    text_box.pack(pady=(0, 15), padx=20, fill=tk.BOTH, expand=True)
+    text_box.pack(fill=tk.BOTH, expand=True)
     
     # Button Frame
     button_frame = tk.Frame(root, bg=BG_DARK)
-    button_frame.pack(pady=10, padx=20, fill=tk.X)
+    button_frame.pack(pady=12, padx=20, fill=tk.X)
     
     browse_button = tk.Button(
         button_frame,
