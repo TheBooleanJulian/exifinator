@@ -150,7 +150,7 @@ def create_gui():
     title_label = tk.Label(
         title_frame,
         text="✦ 初音ミク ♪ Exifinator",
-        font=("Courier New", 24, "bold"),
+        font=("Segoe UI", 24, "bold"),
         bg=BG_DARK,
         fg=TEAL_PRIMARY
     )
@@ -159,7 +159,7 @@ def create_gui():
     subtitle_label = tk.Label(
         title_frame,
         text="Extract EXIF metadata with cyberpunk vibes",
-        font=("Courier New", 10),
+        font=("Segoe UI", 10),
         bg=BG_DARK,
         fg=TEXT_MUTED
     )
@@ -176,7 +176,7 @@ def create_gui():
     thumbnail_title = tk.Label(
         thumbnail_section,
         text="🖼️ Preview",
-        font=("Courier New", 11, "bold"),
+        font=("Segoe UI", 11, "bold"),
         bg=BG_DARK,
         fg=TEAL_PRIMARY
     )
@@ -190,7 +190,7 @@ def create_gui():
     thumbnail_label = tk.Label(
         thumbnail_frame,
         text="📤 Click or Browse\nto load image",
-        font=("Courier New", 10),
+        font=("Segoe UI", 10),
         bg=BG_CARD,
         fg=TEAL_PRIMARY,
         relief=tk.FLAT
@@ -208,7 +208,7 @@ def create_gui():
     data_label = tk.Label(
         right_section,
         text="📊 EXIF Data:",
-        font=("Courier New", 11, "bold"),
+        font=("Segoe UI", 11, "bold"),
         bg=BG_DARK,
         fg=TEAL_PRIMARY
     )
@@ -221,7 +221,7 @@ def create_gui():
         wrap=tk.WORD,
         bg=BG_CARD,
         fg=TEXT_WHITE,
-        font=("Courier New", 8),
+        font=("Consolas", 9),
         borderwidth=1,
         relief=tk.FLAT,
         insertbackground=TEAL_PRIMARY
@@ -236,7 +236,7 @@ def create_gui():
         button_frame,
         text="🔍 Browse Image",
         command=browse_file,
-        font=("Courier New", 11, "bold"),
+        font=("Segoe UI", 11, "bold"),
         bg=TEAL_PRIMARY,
         fg=BG_DARK,
         activebackground=TEAL_DARK,
@@ -252,7 +252,7 @@ def create_gui():
         button_frame,
         text="📋 Copy to Clipboard",
         command=copy_to_clipboard,
-        font=("Courier New", 11, "bold"),
+        font=("Segoe UI", 11, "bold"),
         bg=TEAL_PRIMARY,
         fg=BG_DARK,
         activebackground=TEAL_DARK,
@@ -271,7 +271,7 @@ def create_gui():
     footer_label = tk.Label(
         footer_frame,
         text="✦ Built by TheBooleanJulian ♪ | always watching, always running",
-        font=("Courier New", 8),
+        font=("Segoe UI", 8),
         bg=BG_DARK,
         fg=TEXT_MUTED
     )
