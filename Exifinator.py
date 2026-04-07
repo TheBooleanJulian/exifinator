@@ -66,7 +66,7 @@ def get_gps_location(gps_info):
 def extract_basic_exif(image_path):
     exif = get_exif(image_path)
     if not exif:
-        return "No EXIF data found."
+        return "❌ No EXIF data found."
     
     shutter_speed = format_shutter_speed(exif.get("ExposureTime", "N/A"))
     aperture = exif.get("FNumber", "N/A")
@@ -81,16 +81,18 @@ def extract_basic_exif(image_path):
     gps_info = exif.get("GPSInfo", None)
     location = get_gps_location(gps_info)
     
-    exif_text = (f"Camera: {camera_make} {camera_model}\n"
-                 f"Lens: {lens_model}\n"
-                 f"Focal Length: {focal_length}mm\n"
-                 f"Shutter Speed: {shutter_speed}\n"
-                 f"Aperture: f/{aperture}\n"
-                 f"ISO: {iso}\n"
-                 f"White Balance: {white_balance}\n"
-                 f"Flash: {flash}\n"
-                 f"Date Taken: {datetime_original}\n"
-                 f"Location: {location}")
+    exif_text = (f"✦ ━━━━━━━━━━━━━━━━━━━━━ ✦\n\n"
+                 f"📷 Camera:\n   {camera_make} {camera_model}\n\n"
+                 f"🔭 Lens:\n   {lens_model}\n\n"
+                 f"📏 Focal Length:\n   {focal_length}mm\n\n"
+                 f"⏱️  Shutter Speed:\n   {shutter_speed}\n\n"
+                 f"🌗 Aperture:\n   f/{aperture}\n\n"
+                 f"🔆 ISO:\n   {iso}\n\n"
+                 f"⚪ White Balance:\n   {white_balance}\n\n"
+                 f"💡 Flash:\n   {flash}\n\n"
+                 f"🕐 Date Taken:\n   {datetime_original}\n\n"
+                 f"📍 Location:\n   {location}\n\n"
+                 f"✦ ━━━━━━━━━━━━━━━━━━━━━ ✦")
     
     return exif_text
 
@@ -112,26 +114,132 @@ def copy_to_clipboard():
 def create_gui():
     global text_var, text_box
     root = tk.Tk()
-    root.title("EXIF Extractor")
-    root.geometry("400x400")
+    root.title("✦ Exifinator")
+    root.geometry("600x700")
+    root.resizable(True, True)
     
-    frame = tk.Frame(root, width=380, height=200, relief=tk.RIDGE, borderwidth=2)
-    frame.pack(pady=20)
+    # TheBooleanJulian Branding Colors
+    BG_DARK = "#060910"
+    BG_CARD = "#0c1018"
+    TEAL_PRIMARY = "#00d4c8"
+    TEAL_DARK = "#009e94"
+    TEXT_WHITE = "#e8eaf0"
+    TEXT_MUTED = "#6b7280"
     
-    label = tk.Label(frame, text="Click to Browse Image", wraplength=350)
+    root.configure(bg=BG_DARK)
+    
+    # Title Section
+    title_frame = tk.Frame(root, bg=BG_DARK)
+    title_frame.pack(pady=(20, 10), fill=tk.X, padx=20)
+    
+    title_label = tk.Label(
+        title_frame,
+        text="✦ 初音ミク ♪ Exifinator",
+        font=("Courier New", 24, "bold"),
+        bg=BG_DARK,
+        fg=TEAL_PRIMARY
+    )
+    title_label.pack()
+    
+    subtitle_label = tk.Label(
+        title_frame,
+        text="Extract EXIF metadata with cyberpunk vibes",
+        font=("Courier New", 10),
+        bg=BG_DARK,
+        fg=TEXT_MUTED
+    )
+    subtitle_label.pack()
+    
+    # Image Preview/Browse Area
+    frame = tk.Frame(root, width=560, height=180, bg=BG_CARD, relief=tk.FLAT, borderwidth=2)
+    frame.pack(pady=20, padx=20, fill=tk.BOTH, expand=False)
+    
+    label = tk.Label(
+        frame,
+        text="🖼️  Click to Browse Image\n(JPG, PNG, TIFF, BMP)",
+        wraplength=450,
+        font=("Courier New", 12),
+        bg=BG_CARD,
+        fg=TEAL_PRIMARY,
+        relief=tk.FLAT
+    )
     label.pack(expand=True)
     
     frame.bind("<Button-1>", lambda e: browse_file())
+    label.bind("<Button-1>", lambda e: browse_file())
+    
+    # EXIF Data Display
+    data_label = tk.Label(
+        root,
+        text="📊 EXIF Data:",
+        font=("Courier New", 12, "bold"),
+        bg=BG_DARK,
+        fg=TEAL_PRIMARY
+    )
+    data_label.pack(anchor=tk.W, padx=20, pady=(10, 5))
     
     text_var = tk.StringVar()
-    text_box = tk.Text(root, height=10, wrap=tk.WORD)
-    text_box.pack(pady=10)
+    text_box = tk.Text(
+        root,
+        height=15,
+        wrap=tk.WORD,
+        bg=BG_CARD,
+        fg=TEXT_WHITE,
+        font=("Courier New", 9),
+        borderwidth=1,
+        relief=tk.FLAT,
+        insertbackground=TEAL_PRIMARY
+    )
+    text_box.pack(pady=(0, 15), padx=20, fill=tk.BOTH, expand=True)
     
-    copy_button = tk.Button(root, text="Copy to Clipboard", command=copy_to_clipboard)
-    copy_button.pack()
+    # Button Frame
+    button_frame = tk.Frame(root, bg=BG_DARK)
+    button_frame.pack(pady=10, padx=20, fill=tk.X)
     
-    browse_button = tk.Button(root, text="Browse", command=browse_file)
-    browse_button.pack()
+    browse_button = tk.Button(
+        button_frame,
+        text="🔍 Browse Image",
+        command=browse_file,
+        font=("Courier New", 11, "bold"),
+        bg=TEAL_PRIMARY,
+        fg=BG_DARK,
+        activebackground=TEAL_DARK,
+        activeforeground=BG_DARK,
+        relief=tk.FLAT,
+        padx=15,
+        pady=10,
+        cursor="hand2"
+    )
+    browse_button.pack(side=tk.LEFT, padx=5)
+    
+    copy_button = tk.Button(
+        button_frame,
+        text="📋 Copy to Clipboard",
+        command=copy_to_clipboard,
+        font=("Courier New", 11, "bold"),
+        bg=TEAL_PRIMARY,
+        fg=BG_DARK,
+        activebackground=TEAL_DARK,
+        activeforeground=BG_DARK,
+        relief=tk.FLAT,
+        padx=15,
+        pady=10,
+        cursor="hand2"
+    )
+    copy_button.pack(side=tk.LEFT, padx=5)
+    
+    # Footer
+    footer_frame = tk.Frame(root, bg=BG_DARK, height=40)
+    footer_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=20, pady=(10, 10))
+    
+    footer_label = tk.Label(
+        footer_frame,
+        text="✦ Built by TheBooleanJulian ♪ | always watching, always running",
+        font=("Courier New", 8),
+        bg=BG_DARK,
+        fg=TEXT_MUTED
+    )
+    footer_label.pack()
     
     root.mainloop()
 
