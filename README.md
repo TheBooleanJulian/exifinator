@@ -5,7 +5,9 @@
 **A lightweight local desktop tool for extracting EXIF metadata from photos — no browser, no upload.**
 
 ![Python](https://img.shields.io/badge/-Python-3776AB?logo=python&logoColor=white)
-![License](https://img.shields.io/badge/license-MIT-00D4C8.svg)
+![License](https://img.shields.io/badge/license-AGPLv3%20%2B%20Commercial-00D4C8.svg)
+
+![Exifinator](assets/hero.png)
 
 </div>
 
@@ -86,16 +88,35 @@ Location: New South Wales, Australia
 - [ ] RAW format support (NEF, CR2, ARW)
 - [ ] Batch processing / folder scan
 
+## Future Roadmap
+
+- [ ] RAW format support (NEF, CR2, ARW) via `rawpy`/`exifread`
+- [ ] Batch processing — scan a folder and export EXIF for all images at once
+- [ ] Export to CSV / JSON for archiving or spreadsheet import
+- [ ] Drag-and-drop file support instead of Browse-only
+- [ ] Editable/removable EXIF fields (privacy scrubbing before sharing photos)
+- [ ] Offline reverse-geocoding option (bundled dataset) to remove the Nominatim dependency
+- [ ] Packaged standalone executable (PyInstaller) so Python isn't required to run it
+- [ ] Recent files list / drag history
+- [ ] Dark/light theme toggle
+
 ## Changelog
 
-- **April 2026** — UI polish: replaced Courier New with Segoe UI / Consolas per branding guidelines; applied cyberpunk dark theme with teal accents and emoji icons
-- **April 2026** — Added image thumbnail preview alongside EXIF metadata display
-- **April 2026** — Shutter speeds below 1s now display as fractions (e.g. `1/800`)
-- **April 2026** — Initial release: EXIF extraction, GPS reverse-geocoding, clipboard copy
+Versioning follows `major.minor.patch`: **major** for a new release line, **minor** for new features, **patch** for fixes/polish/docs.
+
+- **v1.3.2** — 2026-07-18 — Revamped README with badges, feature table, roadmap, and changelog (`3be2659`)
+- **v1.3.1** — 2026-04-08 — Modernized fonts: replaced Courier New with Segoe UI / Consolas per branding guidelines (`9c23c93`)
+- **v1.3.0** — 2026-04-08 — Added image thumbnail preview alongside EXIF metadata display (`ef64d4d`)
+- **v1.2.0** — 2026-04-08 — Beautified UI/UX with cyberpunk branding — teal accents, dark theme, emoji icons (`c3279cb`)
+- **v1.1.0** — 2026-04-08 — Shutter speeds below 1s now display as fractions, e.g. `1/800` (`62ffd2e`)
+- **v1.0.0** — 2026-04-08 — Initial release: EXIF extraction, GPS reverse-geocoding, clipboard copy (`38ce1e6`)
 
 ## License
 
-MIT
+This project is dual licensed.
+
+- Community Edition — [GNU Affero General Public License v3 (AGPLv3)](LICENSE). Free to use, modify, and self-host. If you distribute a modified version or run it as a network service, you must make the corresponding source available.
+- Commercial License — for organisations that want to embed, modify, or distribute this software without AGPLv3's obligations. See [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md).
 
 ---
 
