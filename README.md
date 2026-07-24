@@ -4,6 +4,7 @@
 
 **A lightweight local desktop tool for extracting EXIF metadata from photos — no browser, no upload.**
 
+![Version](https://img.shields.io/badge/version-1.3.2-00D4C8.svg)
 ![Python](https://img.shields.io/badge/-Python-3776AB?logo=python&logoColor=white)
 ![License](https://img.shields.io/badge/license-AGPLv3%20%2B%20Commercial-00D4C8.svg)
 
