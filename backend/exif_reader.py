@@ -21,6 +21,23 @@ from backend.metadata_editor import IMAGE_EXTS, find_exiftool
 
 SUPPORTED_EXTS = IMAGE_EXTS
 
+# Tags to pull from exiftool. A trailing "#" forces the raw numeric value
+# (needed for math/formatting below); tags without it get exiftool's own
+# print-converted text, which for WhiteBalance/LightSource/Flash is often a
+# maker-note-specific description (e.g. "Tungsten", "Cloudy", "Fired") richer
+# than the generic two-value EXIF spec would otherwise give.
+READ_TAGS = [
+    "Make", "Model", "LensModel",
+    "FocalLength#", "ExposureTime#", "FNumber#", "ISO",
+    "WhiteBalance", "LightSource", "ColorTemperature",
+    "Flash", "FocusDistance", "SubjectDistance",
+    "DateTimeOriginal",
+    "GPSLatitude#", "GPSLongitude#", "GPSAltitude#", "GPSAltitudeRef#",
+    "ImageWidth", "ImageHeight", "ExifImageWidth", "ExifImageHeight", "Megapixels",
+    "Software", "Artist", "Creator", "Copyright", "Rights",
+    "ShutterCount",
+]
+
 
 def format_shutter_speed(speed):
     """Convert shutter speed to human-readable format (fractions for < 1s)"""
@@ -40,11 +57,9 @@ def format_shutter_speed(speed):
 
 
 def get_exif(image_path):
-    """Read all EXIF/IPTC/XMP/maker-note tags exiftool can find for one file.
-    -n keeps values numeric (not print-converted) so downstream formatting
-    logic can treat FNumber/ExposureTime/WhiteBalance/Flash/GPS consistently."""
+    """Read the fields in READ_TAGS for one file via exiftool."""
     exiftool = find_exiftool()
-    cmd = [exiftool, "-j", "-n", str(image_path)]
+    cmd = [exiftool, "-j"] + [f"-{t}" for t in READ_TAGS] + [str(image_path)]
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode not in (0, 1):  # exiftool returns 1 on minor warnings
         raise RuntimeError(f"exiftool read failed: {result.stderr.strip()}")
@@ -101,6 +116,18 @@ def _first(*values):
     return "N/A"
 
 
+def format_white_balance(exif):
+    """Prefer WhiteBalance's maker-note description (e.g. "Tungsten",
+    "Cloudy", "Kelvin") over the generic two-value EXIF spec, falling back
+    to LightSource, and appending a Kelvin reading when the camera reports
+    one (common when WB is set to a manual color temperature)."""
+    wb = _first(exif.get("WhiteBalance"), exif.get("LightSource"))
+    color_temp = exif.get("ColorTemperature")
+    if color_temp:
+        return f"{wb} ({color_temp}K)" if wb != "N/A" else f"{color_temp}K"
+    return wb
+
+
 def format_gps_altitude(exif):
     altitude = exif.get("GPSAltitude")
     if altitude is None:
@@ -123,8 +150,9 @@ def extract_basic_exif(image_path) -> str:
     camera_make = exif.get("Make", "N/A")
     lens_model = exif.get("LensModel", "N/A")
     focal_length = exif.get("FocalLength", "N/A")
-    white_balance = "Auto" if exif.get("WhiteBalance") == 0 else "Manual"
-    flash = "Fired" if int(exif.get("Flash", 0) or 0) & 1 else "Not Fired"
+    white_balance = format_white_balance(exif)
+    flash = exif.get("Flash", "N/A")
+    focus_distance = _first(exif.get("FocusDistance"), exif.get("SubjectDistance"))
     datetime_original = exif.get("DateTimeOriginal", "N/A")
     location = get_gps_location(exif)
     altitude = format_gps_altitude(exif)
@@ -149,6 +177,7 @@ def extract_basic_exif(image_path) -> str:
         f"⏱️ Shutter Speed:\n   {shutter_speed}\n\n"
         f"\U0001f317 Aperture:\n   f/{aperture}\n\n"
         f"\U0001f506 ISO:\n   {iso}\n\n"
+        f"\U0001f3af Focus Distance:\n   {focus_distance}\n\n"
         f"⚪ White Balance:\n   {white_balance}\n\n"
         f"\U0001f4a1 Flash:\n   {flash}\n\n"
         f"\U0001f550 Date Taken:\n   {datetime_original}\n\n"

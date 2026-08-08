@@ -6,7 +6,9 @@ account, nothing leaves your machine (except optional GPS reverse-geocoding
 on the Read tab, which needs internet).
 
 Two tabs:
-  Read        — open one photo, see its camera/lens/exposure/GPS info.
+  Read        — open one photo (or a whole folder to cycle through with
+                Prev/Next or the arrow keys), see its camera/lens/exposure/
+                GPS info.
   Batch Edit  — fix Artist/Copyright/Creator tags across a whole folder of
                 photos at once (e.g. after borrowing a camera that still has
                 someone else's name baked into every shot).
@@ -110,6 +112,8 @@ class ExifinatorApp(tk.Tk):
         # Read tab state
         self.current_image_path: str | None = None
         self.thumbnail_photo = None
+        self.read_files: list[Path] = []
+        self.read_index: int = -1
 
         # Batch Edit tab state
         self.folder: Path | None = None
@@ -121,9 +125,12 @@ class ExifinatorApp(tk.Tk):
         self._check_exiftool()
 
     # -- setup -------------------------------------------------------
-    def _set_window_icon(self):
+    def _logo_path(self) -> Path:
         here = Path(getattr(sys, "_MEIPASS", Path(__file__).parent))
-        logo_path = here / "assets" / "exifinator-logo.png"
+        return here / "assets" / "exifinator-icon.png"
+
+    def _set_window_icon(self):
+        logo_path = self._logo_path()
         if not logo_path.exists():
             return
         self._icon_photo = ImageTk.PhotoImage(Image.open(logo_path))
@@ -185,11 +192,18 @@ class ExifinatorApp(tk.Tk):
     def _build_layout(self):
         header = ttk.Frame(self, padding=(16, 16, 16, 8))
         header.pack(fill="x")
+        logo_path = self._logo_path()
+        if logo_path.exists():
+            logo_img = Image.open(logo_path)
+            logo_img.thumbnail((28, 28), Image.Resampling.LANCZOS)
+            self._header_logo_photo = ImageTk.PhotoImage(logo_img)
+            tk.Label(header, image=self._header_logo_photo, bg=BG_VOID,
+                     borderwidth=0, highlightthickness=0).pack(side="left", padx=(0, 8))
         ttk.Label(header, text="✦ Exifinator", style="Head.TLabel").pack(side="left")
         ttk.Label(header, text="  ·  read one photo's EXIF, or batch-fix Artist/Copyright across a folder",
                   style="Muted.TLabel").pack(side="left")
 
-        notebook = ttk.Notebook(self)
+        self.notebook = notebook = ttk.Notebook(self)
         notebook.pack(fill="both", expand=True, padx=16, pady=(0, 8))
 
         read_tab = ttk.Frame(notebook, padding=16)
@@ -199,6 +213,11 @@ class ExifinatorApp(tk.Tk):
 
         self._build_read_tab(read_tab)
         self._build_batch_tab(batch_tab)
+
+        # Left/Right cycle through the current folder on the Read tab, as
+        # long as the user isn't typing into a text field somewhere.
+        self.bind_all("<Left>", lambda e: self._on_nav_key(-1))
+        self.bind_all("<Right>", lambda e: self._on_nav_key(1))
 
         footer = ttk.Frame(self, padding=(16, 0, 16, 10))
         footer.pack(fill="x")
@@ -228,6 +247,21 @@ class ExifinatorApp(tk.Tk):
         thumb_frame.bind("<Button-1>", lambda _e: self.browse_photo())
         self.thumb_label.bind("<Button-1>", lambda _e: self.browse_photo())
 
+        # folder filmstrip nav — hidden (via disabled state) until a folder
+        # of photos is loaded, either via Open Folder or by browsing to a
+        # single file (which auto-loads its parent folder for cycling)
+        nav_row = ttk.Frame(thumb_col)
+        nav_row.pack(fill="x", pady=(8, 0))
+        self.prev_btn = ttk.Button(nav_row, text="◀ Prev", style="Ghost.TButton",
+                                    command=self.show_prev_photo, state="disabled")
+        self.prev_btn.pack(side="left")
+        self.next_btn = ttk.Button(nav_row, text="Next ▶", style="Ghost.TButton",
+                                    command=self.show_next_photo, state="disabled")
+        self.next_btn.pack(side="right")
+        self.nav_label = ttk.Label(thumb_col, text="", style="Muted.TLabel",
+                                    anchor="center")
+        self.nav_label.pack(fill="x", pady=(4, 0))
+
         # EXIF text
         data_col = ttk.Frame(root)
         data_col.grid(row=0, column=1, sticky="nsew")
@@ -247,13 +281,67 @@ class ExifinatorApp(tk.Tk):
         buttons.grid(row=2, column=0, sticky="w", pady=(10, 0))
         ttk.Button(buttons, text="🔍 Browse Photo…", style="Accent.TButton",
                    command=self.browse_photo).pack(side="left")
+        ttk.Button(buttons, text="📁 Open Folder…", style="Ghost.TButton",
+                   command=self.open_read_folder).pack(side="left", padx=8)
         ttk.Button(buttons, text="📋 Copy to Clipboard", style="Ghost.TButton",
-                   command=self.copy_exif_text).pack(side="left", padx=8)
+                   command=self.copy_exif_text).pack(side="left")
 
     def browse_photo(self):
         path = filedialog.askopenfilename(title="Choose a photo", filetypes=READ_FILETYPES)
-        if path:
-            self.display_exif(path)
+        if not path:
+            return
+        self._load_read_folder(Path(path).parent, select=Path(path))
+
+    def open_read_folder(self):
+        folder = filedialog.askdirectory(title="Choose a folder of photos")
+        if folder:
+            self._load_read_folder(Path(folder))
+
+    def _load_read_folder(self, folder: Path, select: Path | None = None):
+        files = sorted(
+            p for p in folder.iterdir()
+            if p.is_file() and p.suffix.lower() in exif_reader.SUPPORTED_EXTS
+        )
+        if not files:
+            messagebox.showinfo("No images found", f"No supported image files in {folder}")
+            return
+        self.read_files = files
+        self.read_index = files.index(select) if select in files else 0
+        self._update_nav_state()
+        self.display_exif(str(self.read_files[self.read_index]))
+
+    def _update_nav_state(self):
+        total = len(self.read_files)
+        if total:
+            self.nav_label.configure(
+                text=f"{self.read_index + 1} / {total}  ·  {self.read_files[self.read_index].name}")
+        else:
+            self.nav_label.configure(text="")
+        self.prev_btn.configure(state="normal" if self.read_index > 0 else "disabled")
+        self.next_btn.configure(state="normal" if self.read_index < total - 1 else "disabled")
+
+    def show_prev_photo(self):
+        if self.read_index > 0:
+            self.read_index -= 1
+            self._update_nav_state()
+            self.display_exif(str(self.read_files[self.read_index]))
+
+    def show_next_photo(self):
+        if self.read_index < len(self.read_files) - 1:
+            self.read_index += 1
+            self._update_nav_state()
+            self.display_exif(str(self.read_files[self.read_index]))
+
+    def _on_nav_key(self, direction: int):
+        if self.notebook.index(self.notebook.select()) != 0:
+            return  # only cycle when the Read tab is active
+        focus = self.focus_get()
+        if isinstance(focus, (tk.Entry, ttk.Entry, tk.Text)):
+            return  # don't hijack arrow keys while typing
+        if direction < 0:
+            self.show_prev_photo()
+        else:
+            self.show_next_photo()
 
     def display_exif(self, image_path: str):
         try:
