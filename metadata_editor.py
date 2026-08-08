@@ -1,5 +1,5 @@
 """
-metadata_core.py
+metadata_editor.py
 Backend logic for the Camera Metadata Batch Editor.
 Wraps the exiftool CLI (bundled or system-installed) — kept separate from the
 GUI so it can be tested and reused headlessly.

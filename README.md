@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/exifinator-logo.png" alt="Exifinator logo" width="120">
+
 # Exifinator
 
 **A lightweight local desktop tool for reading *and* batch-editing photo metadata — no browser, no upload.**
@@ -8,7 +10,7 @@
 ![Python](https://img.shields.io/badge/-Python-3776AB?logo=python&logoColor=white)
 ![License](https://img.shields.io/badge/license-AGPLv3%20%2B%20Commercial-00D4C8.svg)
 
-![Exifinator](assets/hero.png)
+![Exifinator](assets/hero-v1.png)
 
 </div>
 

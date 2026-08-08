@@ -2,15 +2,20 @@
 exif_reader.py
 Backend logic for the "Read" tab — extracts EXIF data from a single photo
 and formats it for display. Kept separate from the GUI so it can be tested
-or reused headlessly, same split as metadata_core.py for the batch editor.
+or reused headlessly, same split as metadata_editor.py for the batch editor.
+
+Uses the exiftool CLI (via metadata_editor.find_exiftool) rather than Pillow
+so RAW formats (NEF, ARW, CR2/CR3, DNG, RAF, ORF, RW2, ...) are readable too,
+not just JPEG/PNG/TIFF.
 """
 
+import json
+import subprocess
 from fractions import Fraction
 
-from PIL import Image
-from PIL.ExifTags import GPSTAGS, TAGS
+from metadata_editor import IMAGE_EXTS, find_exiftool
 
-SUPPORTED_EXTS = {".jpg", ".jpeg", ".png", ".tiff", ".bmp"}
+SUPPORTED_EXTS = IMAGE_EXTS
 
 
 def format_shutter_speed(speed):
@@ -31,37 +36,53 @@ def format_shutter_speed(speed):
 
 
 def get_exif(image_path):
-    with Image.open(image_path) as img:
-        exif_data = img._getexif()
-        if not exif_data:
-            return None
-        return {TAGS.get(tag, tag): value for tag, value in exif_data.items()}
+    """Read all EXIF/IPTC/XMP/maker-note tags exiftool can find for one file.
+    -n keeps values numeric (not print-converted) so downstream formatting
+    logic can treat FNumber/ExposureTime/WhiteBalance/Flash/GPS consistently."""
+    exiftool = find_exiftool()
+    cmd = [exiftool, "-j", "-n", str(image_path)]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode not in (0, 1):  # exiftool returns 1 on minor warnings
+        raise RuntimeError(f"exiftool read failed: {result.stderr.strip()}")
+
+    records = json.loads(result.stdout or "[]")
+    if not records:
+        return None
+    return records[0]
 
 
-def get_gps_location(gps_info):
+def get_preview_image_bytes(image_path):
+    """Extract an embedded preview/thumbnail image (as JPEG bytes) from a
+    RAW file via exiftool, for formats Pillow can't decode directly."""
+    exiftool = find_exiftool()
+    for tag in ("-PreviewImage", "-JpgFromRaw", "-ThumbnailImage"):
+        result = subprocess.run(
+            [exiftool, "-b", tag, str(image_path)],
+            capture_output=True,
+        )
+        if result.returncode in (0, 1) and result.stdout:
+            return result.stdout
+    return None
+
+
+def get_gps_location(exif):
     """Reverse-geocode GPS coordinates to a readable place name via Nominatim.
     Requires internet access; every other field in this module is offline."""
-    if not gps_info:
+    if not exif:
         return "N/A"
 
-    gps_tags = {GPSTAGS.get(tag, tag): value for tag, value in gps_info.items()}
+    lat = exif.get("GPSLatitude")
+    lon = exif.get("GPSLongitude")
+    if lat is None or lon is None:
+        return "N/A"
 
-    if "GPSLatitude" in gps_tags and "GPSLongitude" in gps_tags:
-        import geopy.geocoders
+    import geopy.geocoders
 
-        lat = gps_tags["GPSLatitude"]
-        lon = gps_tags["GPSLongitude"]
-        lat_ref = gps_tags.get("GPSLatitudeRef", "N")
-        lon_ref = gps_tags.get("GPSLongitudeRef", "E")
-
-        latitude = (lat[0] + lat[1] / 60 + lat[2] / 3600) * (-1 if lat_ref == "S" else 1)
-        longitude = (lon[0] + lon[1] / 60 + lon[2] / 3600) * (-1 if lon_ref == "W" else 1)
-
-        geolocator = geopy.geocoders.Nominatim(user_agent="exif_reader")
-        location = geolocator.reverse((latitude, longitude), language="en")
-        if location:
-            address = location.raw.get("address", {})
-            return f"{address.get('state', 'Unknown')}, {address.get('country', 'Unknown')}"
+    geolocator = geopy.geocoders.Nominatim(user_agent="exif_reader")
+    location = geolocator.reverse((lat, lon), language="en")
+    if location:
+        address = location.raw.get("address", {})
+        return f"{address.get('state', 'Unknown')}, {address.get('country', 'Unknown')}"
 
     return "N/A"
 
@@ -74,15 +95,15 @@ def extract_basic_exif(image_path) -> str:
 
     shutter_speed = format_shutter_speed(exif.get("ExposureTime", "N/A"))
     aperture = exif.get("FNumber", "N/A")
-    iso = exif.get("ISOSpeedRatings", "N/A")
+    iso = exif.get("ISO", "N/A")
     camera_model = exif.get("Model", "N/A")
     camera_make = exif.get("Make", "N/A")
     lens_model = exif.get("LensModel", "N/A")
     focal_length = exif.get("FocalLength", "N/A")
     white_balance = "Auto" if exif.get("WhiteBalance") == 0 else "Manual"
-    flash = "Fired" if exif.get("Flash", 0) & 1 else "Not Fired"
+    flash = "Fired" if int(exif.get("Flash", 0) or 0) & 1 else "Not Fired"
     datetime_original = exif.get("DateTimeOriginal", "N/A")
-    location = get_gps_location(exif.get("GPSInfo", None))
+    location = get_gps_location(exif)
 
     return (
         f"✦ ───────────────────── ✦\n\n"

@@ -12,11 +12,14 @@ Two tabs:
                 someone else's name baked into every shot).
 
 Run:   python Exifinator.py
-Needs: Pillow, pyperclip, geopy (Read tab) — see requirements.txt
-       exiftool on PATH, or placed next to this script (Batch Edit tab)
+Needs: Pillow, pyperclip, geopy — see requirements.txt
+       exiftool on PATH, or placed next to this script (both tabs;
+       Read tab uses it for tag extraction and RAW previews)
        https://exiftool.org
 """
 
+import io
+import sys
 import threading
 import tkinter as tk
 from pathlib import Path
@@ -25,7 +28,7 @@ from tkinter import filedialog, messagebox, ttk
 from PIL import Image, ImageTk
 
 import exif_reader
-from metadata_core import (
+from metadata_editor import (
     COPYRIGHT_FIELDS, FIELD_GROUPS, NAME_FIELDS, FileInfo, apply_edits,
     build_tag_args, find_exiftool, scan_folder,
 )
@@ -102,6 +105,7 @@ class ExifinatorApp(tk.Tk):
         self.geometry("1200x800")
         self.configure(bg=BG_VOID)
         self.minsize(800, 560)
+        self._set_window_icon()
 
         # Read tab state
         self.current_image_path: str | None = None
@@ -117,6 +121,14 @@ class ExifinatorApp(tk.Tk):
         self._check_exiftool()
 
     # -- setup -------------------------------------------------------
+    def _set_window_icon(self):
+        here = Path(getattr(sys, "_MEIPASS", Path(__file__).parent))
+        logo_path = here / "assets" / "exifinator-logo.png"
+        if not logo_path.exists():
+            return
+        self._icon_photo = ImageTk.PhotoImage(Image.open(logo_path))
+        self.iconphoto(True, self._icon_photo)
+
     def _check_exiftool(self):
         try:
             find_exiftool()
@@ -245,7 +257,16 @@ class ExifinatorApp(tk.Tk):
 
     def display_exif(self, image_path: str):
         try:
-            img = Image.open(image_path)
+            try:
+                img = Image.open(image_path)
+                img.load()
+            except Exception:
+                # Pillow can't decode most RAW formats directly — fall back
+                # to the embedded preview/thumbnail exiftool can pull out.
+                preview = exif_reader.get_preview_image_bytes(image_path)
+                if not preview:
+                    raise
+                img = Image.open(io.BytesIO(preview))
             img.thumbnail((220, 220), Image.Resampling.LANCZOS)
             self.thumbnail_photo = ImageTk.PhotoImage(img)
             self.thumb_label.configure(image=self.thumbnail_photo, text="")
