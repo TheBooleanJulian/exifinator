@@ -13,7 +13,11 @@ import json
 import subprocess
 from fractions import Fraction
 
-from metadata_editor import IMAGE_EXTS, find_exiftool
+if __name__ == "__main__":
+    print("This is a backend module, not the app. Run: python Exifinator.py")
+    raise SystemExit(0)
+
+from backend.metadata_editor import IMAGE_EXTS, find_exiftool
 
 SUPPORTED_EXTS = IMAGE_EXTS
 
@@ -87,6 +91,25 @@ def get_gps_location(exif):
     return "N/A"
 
 
+def _first(*values):
+    """Return the first non-empty value; flattens single-item XMP lists."""
+    for value in values:
+        if isinstance(value, list):
+            value = ", ".join(str(v) for v in value) if value else None
+        if value not in (None, ""):
+            return value
+    return "N/A"
+
+
+def format_gps_altitude(exif):
+    altitude = exif.get("GPSAltitude")
+    if altitude is None:
+        return "N/A"
+    below_sea_level = exif.get("GPSAltitudeRef") == 1
+    sign = "-" if below_sea_level else ""
+    return f"{sign}{abs(altitude):.1f}m"
+
+
 def extract_basic_exif(image_path) -> str:
     """Return a formatted, human-readable EXIF summary for one photo."""
     exif = get_exif(image_path)
@@ -104,18 +127,37 @@ def extract_basic_exif(image_path) -> str:
     flash = "Fired" if int(exif.get("Flash", 0) or 0) & 1 else "Not Fired"
     datetime_original = exif.get("DateTimeOriginal", "N/A")
     location = get_gps_location(exif)
+    altitude = format_gps_altitude(exif)
+
+    width = exif.get("ImageWidth") or exif.get("ExifImageWidth")
+    height = exif.get("ImageHeight") or exif.get("ExifImageHeight")
+    megapixels = exif.get("Megapixels")
+    dimensions = f"{width} × {height}" if width and height else "N/A"
+    if megapixels:
+        dimensions += f"  ({megapixels:.1f} MP)"
+
+    software = exif.get("Software", "N/A")
+    artist = _first(exif.get("Artist"), exif.get("Creator"))
+    copyright_notice = _first(exif.get("Copyright"), exif.get("Rights"))
+    shutter_count = exif.get("ShutterCount", "N/A")
 
     return (
         f"✦ ───────────────────── ✦\n\n"
         f"\U0001f4f7 Camera:\n   {camera_make} {camera_model}\n\n"
         f"\U0001f52d Lens:\n   {lens_model}\n\n"
         f"\U0001f4cf Focal Length:\n   {focal_length}mm\n\n"
-        f"⏱️  Shutter Speed:\n   {shutter_speed}\n\n"
+        f"⏱️ Shutter Speed:\n   {shutter_speed}\n\n"
         f"\U0001f317 Aperture:\n   f/{aperture}\n\n"
         f"\U0001f506 ISO:\n   {iso}\n\n"
         f"⚪ White Balance:\n   {white_balance}\n\n"
         f"\U0001f4a1 Flash:\n   {flash}\n\n"
         f"\U0001f550 Date Taken:\n   {datetime_original}\n\n"
         f"\U0001f4cd Location:\n   {location}\n\n"
+        f"⛰️ Altitude:\n   {altitude}\n\n"
+        f"\U0001f5bc️ Dimensions:\n   {dimensions}\n\n"
+        f"\U0001f4bb Software:\n   {software}\n\n"
+        f"✒️ Artist:\n   {artist}\n\n"
+        f"©️ Copyright:\n   {copyright_notice}\n\n"
+        f"\U0001f522 Shutter Count:\n   {shutter_count}\n\n"
         f"✦ ───────────────────── ✦"
     )

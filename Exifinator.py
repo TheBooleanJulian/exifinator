@@ -12,7 +12,7 @@ Two tabs:
                 someone else's name baked into every shot).
 
 Run:   python Exifinator.py
-Needs: Pillow, pyperclip, geopy — see requirements.txt
+Needs: Pillow, geopy — see requirements.txt
        exiftool on PATH, or placed next to this script (both tabs;
        Read tab uses it for tag extraction and RAW previews)
        https://exiftool.org
@@ -27,8 +27,8 @@ from tkinter import filedialog, messagebox, ttk
 
 from PIL import Image, ImageTk
 
-import exif_reader
-from metadata_editor import (
+from backend import exif_reader
+from backend.metadata_editor import (
     COPYRIGHT_FIELDS, FIELD_GROUPS, NAME_FIELDS, FileInfo, apply_edits,
     build_tag_args, find_exiftool, scan_folder,
 )
@@ -202,7 +202,7 @@ class ExifinatorApp(tk.Tk):
 
         footer = ttk.Frame(self, padding=(16, 0, 16, 10))
         footer.pack(fill="x")
-        ttk.Label(footer, text="✦ Built by TheBooleanJulian ♪ | always watching, always running",
+        ttk.Label(footer, text="✦ Built by TheBooleanJulian ♪",
                   style="Muted.TLabel", font=("Segoe UI", 8)).pack()
 
     # ==================================================================

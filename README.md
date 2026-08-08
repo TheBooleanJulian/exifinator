@@ -1,12 +1,12 @@
 <div align="center">
 
-<img src="assets/exifinator-logo.png" alt="Exifinator logo" width="120">
+<img src="assets/exifinator-logo.png" alt="Exifinator logo" width="240">
 
 # Exifinator
 
 **A lightweight local desktop tool for reading *and* batch-editing photo metadata — no browser, no upload.**
 
-![Version](https://img.shields.io/badge/version-2.0.0-00D4C8.svg)
+![Version](https://img.shields.io/badge/version-2.1.0-00D4C8.svg)
 ![Python](https://img.shields.io/badge/-Python-3776AB?logo=python&logoColor=white)
 ![License](https://img.shields.io/badge/license-AGPLv3%20%2B%20Commercial-00D4C8.svg)
 
@@ -20,7 +20,7 @@
 
 Exifinator is a local desktop app for working with photo metadata, in two tabs:
 
-- **Read** — open one photo, instantly see camera model, lens, focal length, aperture, shutter speed, ISO, flash, white balance, date taken, and reverse-geocoded GPS location.
+- **Read** — open one photo (including RAW), instantly see camera model, lens, focal length, aperture, shutter speed, ISO, flash, white balance, date taken, GPS location/altitude, dimensions, software, Artist/Copyright, and shutter count.
 - **Batch Edit** — fix **Artist / Copyright / Creator** tags across a whole folder of photos at once (e.g. after borrowing a camera that still has someone else's name baked into every shot). Edits EXIF, IPTC, and XMP fields together or individually, lets you preview before writing, and keeps `_original` backups by default.
 
 Everything runs on your machine — no account, no cloud. The only thing that touches the internet is optional GPS reverse-geocoding on the Read tab.
@@ -28,10 +28,11 @@ Everything runs on your machine — no account, no cloud. The only thing that to
 ## Features
 
 **Read tab**
-- Reads camera make/model, lens, focal length, aperture, shutter speed, ISO, white balance, flash, and date taken
+- Reads camera make/model, lens, focal length, aperture, shutter speed, ISO, white balance, flash, date taken, image dimensions/megapixels, software, Artist, Copyright, and shutter count
+- Supports RAW formats (CR2/CR3, NEF, ARW, DNG, RAF, ORF, RW2) as well as JPEG/PNG/TIFF/HEIC — reads via exiftool, same backend as Batch Edit
+- Thumbnail preview for RAW files falls back to the embedded preview image when Pillow can't decode the file directly
 - Formats shutter speeds below 1s as fractions (e.g. `1/800`)
-- Reverse-geocodes GPS coordinates to a readable place name via OpenStreetMap/Nominatim
-- Image thumbnail preview displayed alongside EXIF output
+- Reverse-geocodes GPS coordinates (and altitude) to a readable place name via OpenStreetMap/Nominatim
 - One-click **Copy to Clipboard** for formatted output
 
 **Batch Edit tab**
@@ -51,10 +52,10 @@ Everything runs on your machine — no account, no cloud. The only thing that to
 | Layer | Choice |
 |---|---|
 | Desktop UI | Python + Tkinter |
-| Image / EXIF (Read tab) | Pillow |
-| Clipboard | pyperclip |
+| Image / thumbnail display | Pillow |
+| EXIF/IPTC/XMP read (Read tab) & read/write (Batch Edit tab) | [exiftool](https://exiftool.org) (external binary) |
+| Clipboard | Tkinter (built-in) |
 | Geocoding | geopy (Nominatim / OpenStreetMap) |
-| Metadata read/write (Batch Edit tab) | [exiftool](https://exiftool.org) (external binary) |
 
 ## Quick Start
 
@@ -67,12 +68,10 @@ python Exifinator.py
 
 > `tkinter` is included with the standard Python distribution on Windows and macOS.
 
-The Batch Edit tab also needs **exiftool** on your machine:
+Both tabs need **exiftool** on your machine:
 - Windows: https://exiftool.org → download the `.zip`, extract, rename `exiftool(-k).exe` to `exiftool.exe`, and place it in the **same folder** as `Exifinator.py` (or anywhere on your PATH)
 - macOS: `brew install exiftool`
 - Linux: `sudo apt install libimage-exiftool-perl`
-
-The Read tab works without exiftool installed.
 
 ## Usage
 
@@ -81,7 +80,7 @@ The Read tab works without exiftool installed.
 2. EXIF data populates in the text box
 3. Click **Copy to Clipboard** to grab the formatted output
 
-**Supported formats:** `.jpg` `.jpeg` `.png` `.tiff` `.bmp`
+**Supported formats:** `.jpg` `.jpeg` `.png` `.tif` `.tiff` `.heic` `.heif` `.cr2` `.cr3` `.nef` `.arw` `.dng` `.raf` `.orf` `.rw2`
 
 > GPS reverse-geocoding requires an internet connection. All other Read-tab features work fully offline.
 
@@ -107,6 +106,12 @@ White Balance: Auto
 Flash: Not Fired
 Date Taken: 2025:11:02 14:33:21
 Location: New South Wales, Australia
+Altitude: 58.2m
+Dimensions: 5440 × 3616  (19.7 MP)
+Software: Ver.1.30
+Artist: Julian Cheung/Accurova
+Copyright: Julian Cheung/Accurova
+Shutter Count: 230363
 ```
 
 **Batch Edit preview:**
@@ -128,14 +133,14 @@ pip install pyinstaller
 pyinstaller --onefile --windowed --add-binary "exiftool.exe;." Exifinator.py
 ```
 
-Run this **on the target OS** (e.g. on Windows to get a Windows `.exe`) — PyInstaller doesn't cross-compile. The `--add-binary` flag bundles exiftool into the executable itself so end users don't need to install anything separately for the Batch Edit tab. The output lands in `dist/Exifinator.exe`.
+Run this **on the target OS** (e.g. on Windows to get a Windows `.exe`) — PyInstaller doesn't cross-compile. The `--add-binary` flag bundles exiftool into the executable itself so end users don't need to install anything separately for either tab. The output lands in `dist/Exifinator.exe`.
 
 ## Known Limitations
 
-- RAW formats (`.NEF`, `.CR2`, `.ARW`) are not supported on the **Read** tab — EXIF is read from JPEG-embedded data only via Pillow. (The **Batch Edit** tab, via exiftool, does support RAW formats: CR2/CR3, NEF, ARW, DNG, RAF, ORF, RW2.)
+- Both tabs require exiftool to be installed separately (not bundled), unless you build the standalone .exe with `--add-binary`
 - GPS lookup depends on Nominatim uptime and rate limits; heavy use may throttle results
-- `_getexif()` is a Pillow internal method and may behave differently across library versions
-- Batch Edit requires exiftool to be installed separately (not bundled)
+- Shutter Count is only populated for cameras whose maker notes expose it (mainly Canon/Nikon/Pentax/some Sony bodies) — most files will show `N/A`
+- RAW thumbnail previews use the file's embedded preview/thumbnail image, not a full raw decode, so preview quality/orientation may differ slightly from the original
 
 ## Status / Roadmap
 
@@ -145,11 +150,10 @@ Run this **on the target OS** (e.g. on Windows to get a Windows `.exe`) — PyIn
 - [x] Shutter speed fraction formatting
 - [x] Cyberpunk dark-theme UI
 - [x] Batch processing / folder scan (Batch Edit tab)
-- [ ] RAW format support on the Read tab (NEF, CR2, ARW)
+- [x] RAW format support on the Read tab (NEF, CR2/CR3, ARW, DNG, RAF, ORF, RW2)
 
 ## Future Roadmap
 
-- [ ] RAW format support on the Read tab via `rawpy`/`exifread`
 - [ ] Export Read-tab EXIF to CSV / JSON for archiving or spreadsheet import
 - [ ] Drag-and-drop file support instead of Browse-only
 - [ ] Editable/removable EXIF fields on the Read tab (privacy scrubbing before sharing photos)
@@ -162,6 +166,7 @@ Run this **on the target OS** (e.g. on Windows to get a Windows `.exe`) — PyIn
 
 Versioning follows `major.minor.patch`: **major** for a new release line, **minor** for new features, **patch** for fixes/polish/docs.
 
+- **v2.1.0** — 2026-08-09 — Read tab now reads via exiftool instead of Pillow, adding RAW support (CR2/CR3, NEF, ARW, DNG, RAF, ORF, RW2) with embedded-preview thumbnails, plus new fields (GPS altitude, dimensions/megapixels, Software, Artist, Copyright, Shutter Count); app window now uses the Exifinator logo as its icon; backend modules (`exif_reader.py`, `metadata_editor.py`) moved into a `backend/` package so `Exifinator.py` is the only entry point at the project root; removed unused `pyperclip` dependency
 - **v2.0.0** — 2026-08-09 — Merged in the standalone Camera Metadata Batch Editor as a second **Batch Edit** tab (folder-wide Artist/Copyright/Creator writing via exiftool, with dry-run preview and plain-English field tooltips); app is now a single `Exifinator.py` entry point with a tabbed UI instead of two separate tools
 - **v1.3.2** — 2026-07-18 — Revamped README with badges, feature table, roadmap, and changelog (`3be2659`)
 - **v1.3.1** — 2026-04-08 — Modernized fonts: replaced Courier New with Segoe UI / Consolas per branding guidelines (`9c23c93`)

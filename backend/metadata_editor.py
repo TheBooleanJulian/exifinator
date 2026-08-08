@@ -59,9 +59,10 @@ class FileInfo:
 
 
 def find_exiftool() -> str:
-    """Locate the exiftool executable — bundled next to this script first,
-    falling back to whatever is on PATH."""
-    here = Path(getattr(sys, "_MEIPASS", Path(__file__).parent))
+    """Locate the exiftool executable — bundled next to Exifinator.py (the
+    app root, one level up from this backend/ module) first, falling back
+    to whatever is on PATH."""
+    here = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
     for candidate in ("exiftool.exe", "exiftool"):
         bundled = here / candidate
         if bundled.exists():
@@ -156,3 +157,7 @@ def apply_edits(
     if result.returncode not in (0, 1):
         return False, result.stderr.strip() or "Unknown exiftool error."
     return True, result.stdout.strip()
+
+
+if __name__ == "__main__":
+    print("This is a backend module, not the app. Run: python Exifinator.py")
