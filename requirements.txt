@@ -1,1 +1,3 @@
-git+https://github.com/TheBooleanJulian/thebooleanjulian-bot-core.git@main
+Pillow
+pyperclip
+geopy
