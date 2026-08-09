@@ -9,6 +9,7 @@ import json
 import shutil
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -77,6 +78,23 @@ def find_exiftool() -> str:
     )
 
 
+def _run_exiftool(exiftool: str, args: list[str]) -> subprocess.CompletedProcess:
+    """Run exiftool with the given arguments via an -@ argfile rather than
+    directly on the command line. A folder with enough files (or long paths)
+    can push the command line past Windows' ~32K character limit, which
+    fails with WinError 206 ("filename or extension is too long") even
+    though every individual path is well within MAX_PATH."""
+    with tempfile.NamedTemporaryFile(
+        "w", suffix=".args", delete=False, encoding="utf-8-sig"
+    ) as f:
+        f.write("\n".join(args))
+        argfile = f.name
+    try:
+        return subprocess.run([exiftool, "-@", argfile], capture_output=True, text=True)
+    finally:
+        Path(argfile).unlink(missing_ok=True)
+
+
 def scan_folder(folder: Path, recursive: bool = False) -> list[FileInfo]:
     """Scan a folder for image files and read their current authorship tags."""
     exiftool = find_exiftool()
@@ -88,8 +106,8 @@ def scan_folder(folder: Path, recursive: bool = False) -> list[FileInfo]:
     if not files:
         return []
 
-    cmd = [exiftool, "-j", "-fast2"] + [f"-{t}" for t in READ_TAGS] + [str(f) for f in files]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    args = ["-j", "-fast2"] + [f"-{t}" for t in READ_TAGS] + [str(f) for f in files]
+    result = _run_exiftool(exiftool, args)
     if result.returncode not in (0, 1):  # exiftool returns 1 on minor warnings
         raise RuntimeError(f"exiftool scan failed: {result.stderr.strip()}")
 
@@ -146,14 +164,14 @@ def apply_edits(
         return False, "No fields selected, or the text boxes are empty."
 
     exiftool = find_exiftool()
-    cmd = [exiftool] + tag_args
-    cmd.append("-overwrite_original" if not keep_backup else "-P")  # -P preserves file mod date, keeps _original backup by default
-    cmd += [str(f) for f in files]
+    args = list(tag_args)
+    args.append("-overwrite_original" if not keep_backup else "-P")  # -P preserves file mod date, keeps _original backup by default
+    args += [str(f) for f in files]
 
     if dry_run:
-        return True, " ".join(cmd)
+        return True, " ".join([exiftool] + args)
 
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = _run_exiftool(exiftool, args)
     if result.returncode not in (0, 1):
         return False, result.stderr.strip() or "Unknown exiftool error."
     return True, result.stdout.strip()
