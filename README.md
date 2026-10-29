@@ -6,7 +6,7 @@
 
 **A lightweight local desktop tool for reading *and* batch-editing photo metadata — no browser, no upload.**
 
-![Version](https://img.shields.io/badge/version-2.3.0-00D4C8.svg)
+![Version](https://img.shields.io/badge/version-2.4.0-00D4C8.svg)
 ![Python](https://img.shields.io/badge/-Python-3776AB?logo=python&logoColor=white)
 ![License](https://img.shields.io/badge/license-AGPLv3%20%2B%20Commercial-00D4C8.svg)
 
@@ -18,7 +18,7 @@
 
 ## What it does
 
-Exifinator is a local desktop app for working with photo metadata, in two tabs:
+Exifinator is a local desktop app for working with photo metadata and filenames, in three tabs:
 
 - **Read** — open one photo (including RAW), instantly see camera model, lens, focal length, aperture, shutter speed, ISO, flash, white balance, date taken, GPS location/altitude, dimensions, software, Artist/Copyright, and shutter count.
 - **Batch Edit** — fix **Artist / Copyright / Creator** tags across a whole folder of photos at once (e.g. after borrowing a camera that still has someone else's name baked into every shot). Edits EXIF, IPTC, and XMP fields together or individually, lets you preview before writing, and keeps `_original` backups by default.
@@ -44,7 +44,15 @@ Everything runs on your machine — no account, no cloud. The only thing that to
 - Keeps `_original` backup copies by default
 - Camera serial number and similar hardware-identifying fields are intentionally not exposed — they identify the physical body, not authorship
 
-**Both tabs**
+**Rename tab**
+- Add individual files or a whole folder (optionally images only), with a live *Original → New* preview before anything is renamed
+- Combinable operations, applied in order: find & replace, remove text (literal or regex), prepend, append, case change, event preset, sequential numbering, extension override
+- **Event preset** builds the studio naming convention `<date>_<event>_Photo By <photographer>_<original name>` (a leading underscore on the original name is dropped)
+- Conflict handling: auto-number, skip, or overwrite
+- **Undo Last Rename** reverts the most recent batch, and the undo log is saved to `exifinator_rename_undo.json` next to the app, so it survives a restart
+- Pure standard library, no exiftool needed
+
+**All tabs**
 - Cyberpunk-themed dark UI with teal accents (Segoe UI / Consolas), with the Exifinator icon in the header and window/taskbar icon
 - Fully offline except for GPS lookup; no data leaves your machine
 
@@ -69,7 +77,7 @@ python Exifinator.py
 
 > `tkinter` is included with the standard Python distribution on Windows and macOS.
 
-Both tabs need **exiftool** on your machine:
+The Read and Batch Edit tabs need **exiftool** on your machine:
 - Windows: https://exiftool.org → download the `.zip`, extract, rename `exiftool(-k).exe` to `exiftool.exe`, and place it in the **same folder** as `Exifinator.py` (or anywhere on your PATH)
 - macOS: `brew install exiftool`
 - Linux: `sudo apt install libimage-exiftool-perl`
@@ -84,6 +92,11 @@ Both tabs need **exiftool** on your machine:
 **Supported formats:** `.jpg` `.jpeg` `.png` `.tif` `.tiff` `.heic` `.heif` `.cr2` `.cr3` `.nef` `.arw` `.dng` `.raf` `.orf` `.rw2`
 
 > GPS reverse-geocoding requires an internet connection. All other Read-tab features work fully offline.
+
+### Rename tab
+1. **Add Files…** or **Add Folder…** (tick "Images only" to skip videos and other files)
+2. Set any options on the right; the *New Name* column updates as you type. For the studio convention, tick **Enable event preset** and fill in the date, event and photographer
+3. Click **Apply Rename** and confirm. **Undo Last Rename** reverts that batch, even after restarting the app
 
 ### Batch Edit tab
 1. **Choose Folder…** — pick the folder of photos (tick "Include subfolders" if needed)
@@ -139,7 +152,8 @@ Run this **on the target OS** (e.g. on Windows to get a Windows `.exe`) — PyIn
 
 ## Known Limitations
 
-- Both tabs require exiftool to be installed separately (not bundled), unless you build the standalone .exe with `--add-binary`
+- The Read and Batch Edit tabs require exiftool to be installed separately (not bundled), unless you build the standalone .exe with `--add-binary`; the Rename tab works without it
+- Rename undo covers only the most recent batch
 - GPS lookup depends on Nominatim uptime and rate limits; heavy use may throttle results
 - Shutter Count is only populated for cameras whose maker notes expose it (mainly Canon/Nikon/Pentax/some Sony bodies) — most files will show `N/A`
 - RAW thumbnail previews use the file's embedded preview/thumbnail image, not a full raw decode, so preview quality/orientation may differ slightly from the original
@@ -153,6 +167,7 @@ Run this **on the target OS** (e.g. on Windows to get a Windows `.exe`) — PyIn
 - [x] Cyberpunk dark-theme UI
 - [x] Batch processing / folder scan (Batch Edit tab)
 - [x] RAW format support on the Read tab (NEF, CR2/CR3, ARW, DNG, RAF, ORF, RW2)
+- [x] Batch file renamer with event preset and persistent undo (Rename tab)
 
 ## Future Roadmap
 
@@ -168,6 +183,7 @@ Run this **on the target OS** (e.g. on Windows to get a Windows `.exe`) — PyIn
 
 Versioning follows `major.minor.patch`: **major** for a new release line, **minor** for new features, **patch** for fixes/polish/docs.
 
+- **v2.4.0** — 2026-10-29 — Merged in the standalone Photo/File Batch Renamer as a third **Rename** tab: live preview, find & replace, remove (literal/regex), prepend/append, case, sequential numbering, extension override, conflict handling, a new event preset (`<date>_<event>_Photo By <photographer>_`) that replaces the old `Batch Rename.py` script, and undo that persists across restarts; logic lives in `backend/file_renamer.py`, standard library only; the superseded script is kept in `archive/`
 - **v2.3.0** — 2026-08-09 — Read tab now shows Focus Distance (from exiftool's cross-brand `FocusDistance` composite tag, falling back to the standard EXIF `SubjectDistance`); the Exifinator icon now appears in the app header (a cropped version of the full logo, since the full square with wordmark was unreadable at small sizes) and is reused for the window/taskbar icon
 - **v2.2.0** — 2026-08-09 — Read tab gets folder support: **Open Folder…** loads every supported image in a directory, with Prev/Next buttons and Left/Right arrow-key cycling so you don't have to reopen the file picker for each photo; White Balance now shows the camera's own maker-note description (e.g. "Tungsten", "Cloudy") plus a Kelvin reading when the camera reports one, instead of a hardcoded Auto/Manual
 - **v2.1.0** — 2026-08-09 — Read tab now reads via exiftool instead of Pillow, adding RAW support (CR2/CR3, NEF, ARW, DNG, RAF, ORF, RW2) with embedded-preview thumbnails, plus new fields (GPS altitude, dimensions/megapixels, Software, Artist, Copyright, Shutter Count); app window now uses the Exifinator logo as its icon; backend modules (`exif_reader.py`, `metadata_editor.py`) moved into a `backend/` package so `Exifinator.py` is the only entry point at the project root; removed unused `pyperclip` dependency
