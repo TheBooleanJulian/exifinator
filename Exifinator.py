@@ -5,13 +5,16 @@ A local desktop tool for working with photo metadata — no upload, no
 account, nothing leaves your machine (except optional GPS reverse-geocoding
 on the Read tab, which needs internet).
 
-Two tabs:
+Three tabs:
   Read        — open one photo (or a whole folder to cycle through with
                 Prev/Next or the arrow keys), see its camera/lens/exposure/
                 GPS info.
   Batch Edit  — fix Artist/Copyright/Creator tags across a whole folder of
                 photos at once (e.g. after borrowing a camera that still has
                 someone else's name baked into every shot).
+  Rename      — batch rename photos/files with a live preview: find &
+                replace, prepend/append, case, numbering, an event preset
+                (date_event_Photo By name_), and undo that survives restarts.
 
 Run:   python Exifinator.py
 Needs: Pillow, geopy — see requirements.txt
@@ -24,12 +27,16 @@ import io
 import sys
 import threading
 import tkinter as tk
+from datetime import date
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 from PIL import Image, ImageTk
 
 from backend import exif_reader
+from backend.file_renamer import (
+    IMAGE_EXTS, RenameEngine, load_undo_log, plan_renames, save_undo_log,
+)
 from backend.metadata_editor import (
     COPYRIGHT_FIELDS, FIELD_GROUPS, NAME_FIELDS, FileInfo, apply_edits,
     build_tag_args, find_exiftool, scan_folder,
@@ -120,6 +127,11 @@ class ExifinatorApp(tk.Tk):
         self.files: list[FileInfo] = []
         self.field_vars: dict[str, tk.BooleanVar] = {}
 
+        # Rename tab state
+        self.rn_engine = RenameEngine()
+        self.rn_files: list[Path] = []
+        self.rn_last_batch = load_undo_log()  # list[(new_path, old_path)]
+
         self._build_style()
         self._build_layout()
         self._check_exiftool()
@@ -200,7 +212,7 @@ class ExifinatorApp(tk.Tk):
             tk.Label(header, image=self._header_logo_photo, bg=BG_VOID,
                      borderwidth=0, highlightthickness=0).pack(side="left", padx=(0, 8))
         ttk.Label(header, text="✦ Exifinator", style="Head.TLabel").pack(side="left")
-        ttk.Label(header, text="  ·  read one photo's EXIF, or batch-fix Artist/Copyright across a folder",
+        ttk.Label(header, text="  ·  read EXIF, batch-fix Artist/Copyright, or batch rename files",
                   style="Muted.TLabel").pack(side="left")
 
         self.notebook = notebook = ttk.Notebook(self)
@@ -210,9 +222,12 @@ class ExifinatorApp(tk.Tk):
         batch_tab = ttk.Frame(notebook, padding=16)
         notebook.add(read_tab, text="🔍  Read")
         notebook.add(batch_tab, text="✏️  Batch Edit")
+        rename_tab = ttk.Frame(notebook, padding=16)
+        notebook.add(rename_tab, text="🏷️  Rename")
 
         self._build_read_tab(read_tab)
         self._build_batch_tab(batch_tab)
+        self._build_rename_tab(rename_tab)
 
         # Left/Right cycle through the current folder on the Read tab, as
         # long as the user isn't typing into a text field somewhere.
@@ -675,6 +690,299 @@ class ExifinatorApp(tk.Tk):
             self.rescan()
         else:
             messagebox.showerror("Failed", msg)
+
+    # ==================================================================
+    #  Rename tab — batch file/photo renamer
+    # ==================================================================
+    def _build_rename_tab(self, root: ttk.Frame):
+        root.columnconfigure(0, weight=3)
+        root.columnconfigure(1, weight=2)
+        root.rowconfigure(0, weight=1)
+
+        # left: file controls + preview table
+        left = ttk.Frame(root)
+        left.grid(row=0, column=0, sticky="nsew", padx=(0, 16))
+        left.rowconfigure(1, weight=1)
+        left.columnconfigure(0, weight=1)
+
+        controls = ttk.Frame(left)
+        controls.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        ttk.Button(controls, text="Add Files…", style="Accent.TButton",
+                   command=self.rn_add_files).pack(side="left")
+        ttk.Button(controls, text="Add Folder…", style="Ghost.TButton",
+                   command=self.rn_add_folder).pack(side="left", padx=8)
+        ttk.Button(controls, text="Remove Selected", style="Ghost.TButton",
+                   command=self.rn_remove_selected).pack(side="left")
+        ttk.Button(controls, text="Clear", style="Ghost.TButton",
+                   command=self.rn_clear).pack(side="left", padx=8)
+        self.rn_images_only = tk.BooleanVar(value=False)
+        ttk.Checkbutton(controls, text="Images only (Add Folder)",
+                         variable=self.rn_images_only).pack(side="left", padx=8)
+
+        table_frame = ttk.Frame(left)
+        table_frame.grid(row=1, column=0, sticky="nsew")
+        table_frame.rowconfigure(0, weight=1)
+        table_frame.columnconfigure(0, weight=1)
+        self.rn_tree = ttk.Treeview(table_frame, columns=("original", "new"),
+                                     show="headings", selectmode="extended")
+        self.rn_tree.heading("original", text="Original Name")
+        self.rn_tree.heading("new", text="New Name")
+        self.rn_tree.column("original", width=260, minwidth=120)
+        self.rn_tree.column("new", width=320, minwidth=160)
+        self.rn_tree.grid(row=0, column=0, sticky="nsew")
+        vsb = ttk.Scrollbar(table_frame, orient="vertical", command=self.rn_tree.yview)
+        vsb.grid(row=0, column=1, sticky="ns")
+        hsb = ttk.Scrollbar(table_frame, orient="horizontal", command=self.rn_tree.xview)
+        hsb.grid(row=1, column=0, sticky="ew")
+        self.rn_tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+
+        bottom = ttk.Frame(left)
+        bottom.grid(row=2, column=0, sticky="ew", pady=(8, 0))
+        ttk.Button(bottom, text="Apply Rename", style="Accent.TButton",
+                   command=self.rn_apply).pack(side="left")
+        ttk.Button(bottom, text="Undo Last Rename", style="Ghost.TButton",
+                   command=self.rn_undo).pack(side="left", padx=8)
+        self.rn_count_label = ttk.Label(bottom, text="0 files", style="Muted.TLabel")
+        self.rn_count_label.pack(side="right")
+        self.rn_status = ttk.Label(bottom, text="Ready.", style="Muted.TLabel")
+        self.rn_status.pack(side="right", padx=12)
+
+        # right: scrollable options panel
+        outer = ttk.Frame(root, style="Panel.TFrame")
+        outer.grid(row=0, column=1, sticky="nsew")
+        outer.rowconfigure(0, weight=1)
+        outer.columnconfigure(0, weight=1)
+        canvas = tk.Canvas(outer, bg=BG_PANEL, highlightthickness=0)
+        canvas.grid(row=0, column=0, sticky="nsew")
+        opt_vsb = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
+        opt_vsb.grid(row=0, column=1, sticky="ns")
+        canvas.configure(yscrollcommand=opt_vsb.set)
+        panel = ttk.Frame(canvas, style="Panel.TFrame", padding=16)
+        win = canvas.create_window((0, 0), window=panel, anchor="nw")
+        panel.columnconfigure(0, weight=1)
+        panel.columnconfigure(1, weight=1)
+        panel.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.bind("<Configure>", lambda e: canvas.itemconfigure(win, width=e.width))
+        self._build_rename_options(panel)
+
+    def _build_rename_options(self, parent: ttk.Frame):
+        row = 0
+        refresh = lambda _e=None: self.rn_refresh_preview()
+
+        def head(text):
+            nonlocal row
+            ttk.Label(parent, text=text, style="Panel.TLabel",
+                      font=("Segoe UI Semibold", 10), foreground=GOLD).grid(
+                row=row, column=0, columnspan=2, sticky="w", pady=(10, 2))
+            row += 1
+
+        def field(label, var, width=14):
+            nonlocal row
+            ttk.Label(parent, text=label, style="PanelMuted.TLabel").grid(row=row, column=0, sticky="w")
+            ent = ttk.Entry(parent, textvariable=var, width=width)
+            ent.grid(row=row, column=1, sticky="ew", pady=2)
+            ent.bind("<KeyRelease>", refresh)
+            row += 1
+
+        def combo(label, var, values):
+            nonlocal row
+            ttk.Label(parent, text=label, style="PanelMuted.TLabel").grid(row=row, column=0, sticky="w")
+            cb = ttk.Combobox(parent, textvariable=var, values=values, state="readonly", width=12)
+            cb.grid(row=row, column=1, sticky="ew", pady=2)
+            cb.bind("<<ComboboxSelected>>", refresh)
+            row += 1
+
+        def check(text, var):
+            nonlocal row
+            ttk.Checkbutton(parent, text=text, variable=var, style="Panel.TCheckbutton",
+                             command=refresh).grid(row=row, column=0, columnspan=2, sticky="w")
+            row += 1
+
+        head("Event preset  (date_event_Photo By name_)")
+        self.rn_preset = tk.BooleanVar(value=False)
+        check("Enable event preset", self.rn_preset)
+        self.rn_preset_date = tk.StringVar(value=date.today().isoformat())
+        self.rn_preset_event = tk.StringVar()
+        self.rn_preset_photog = tk.StringVar()
+        field("Date:", self.rn_preset_date)
+        field("Event:", self.rn_preset_event)
+        field("Photographer:", self.rn_preset_photog)
+
+        head("Prepend / Append")
+        self.rn_prepend = tk.StringVar()
+        self.rn_append = tk.StringVar()
+        field("Prepend:", self.rn_prepend)
+        field("Append:", self.rn_append)
+
+        head("Find & Replace")
+        self.rn_find = tk.StringVar()
+        self.rn_replace = tk.StringVar()
+        field("Find:", self.rn_find)
+        field("Replace with:", self.rn_replace)
+
+        head("Remove text")
+        self.rn_remove = tk.StringVar()
+        field("Remove:", self.rn_remove)
+        self.rn_remove_regex = tk.BooleanVar(value=False)
+        check("Treat as regex", self.rn_remove_regex)
+
+        head("Case")
+        self.rn_case = tk.StringVar(value="none")
+        combo("Change case:", self.rn_case, ["none", "upper", "lower", "title"])
+
+        head("Sequential numbering")
+        self.rn_numbering = tk.BooleanVar(value=False)
+        check("Enable numbering", self.rn_numbering)
+        self.rn_num_pos = tk.StringVar(value="suffix")
+        combo("Position:", self.rn_num_pos, ["prefix", "suffix"])
+        self.rn_num_start = tk.StringVar(value="1")
+        self.rn_num_digits = tk.StringVar(value="3")
+        self.rn_num_sep = tk.StringVar(value="_")
+        field("Start #:", self.rn_num_start)
+        field("Digits:", self.rn_num_digits)
+        field("Separator:", self.rn_num_sep)
+
+        head("Extension & conflicts")
+        self.rn_ext = tk.StringVar()
+        field("New extension:", self.rn_ext)
+        self.rn_conflict = tk.StringVar(value="auto_number")
+        combo("If name exists:", self.rn_conflict, ["auto_number", "skip", "overwrite"])
+
+    def _rn_sync_engine(self):
+        e = self.rn_engine
+        e.preset_enabled = self.rn_preset.get()
+        e.preset_date = self.rn_preset_date.get().strip()
+        e.preset_event = self.rn_preset_event.get().strip()
+        e.preset_photographer = self.rn_preset_photog.get().strip()
+        e.prepend_text = self.rn_prepend.get()
+        e.append_text = self.rn_append.get()
+        e.find_text = self.rn_find.get()
+        e.replace_text = self.rn_replace.get()
+        e.remove_text = self.rn_remove.get()
+        e.remove_is_regex = self.rn_remove_regex.get()
+        e.case_mode = self.rn_case.get()
+        e.numbering_enabled = self.rn_numbering.get()
+        e.numbering_position = self.rn_num_pos.get()
+        try:
+            e.numbering_start = int(self.rn_num_start.get())
+        except ValueError:
+            e.numbering_start = 1
+        try:
+            e.numbering_digits = max(1, int(self.rn_num_digits.get()))
+        except ValueError:
+            e.numbering_digits = 3
+        e.numbering_separator = self.rn_num_sep.get()
+        ext = self.rn_ext.get().strip()
+        if ext and not ext.startswith("."):
+            ext = "." + ext
+        e.new_extension = ext
+        e.conflict_mode = self.rn_conflict.get()
+
+    def rn_refresh_preview(self):
+        self._rn_sync_engine()
+        self.rn_tree.delete(*self.rn_tree.get_children())
+        seen = set()
+        for idx, path in enumerate(self.rn_files):
+            new_name = self.rn_engine.compute_new_name(path, idx)
+            key = (path.parent, new_name)
+            if key in seen:
+                new_name += "  [DUPLICATE]"
+            seen.add(key)
+            self.rn_tree.insert("", "end", values=(path.name, new_name))
+        self.rn_count_label.config(text=f"{len(self.rn_files)} files")
+
+    def rn_add_files(self):
+        paths = filedialog.askopenfilenames(title="Select files to rename")
+        for p in paths:
+            path = Path(p)
+            if path not in self.rn_files:
+                self.rn_files.append(path)
+        if paths:
+            self.rn_refresh_preview()
+
+    def rn_add_folder(self):
+        folder = filedialog.askdirectory(title="Select a folder")
+        if not folder:
+            return
+        only_images = self.rn_images_only.get()
+        added = 0
+        for entry in sorted(Path(folder).iterdir()):
+            if not entry.is_file():
+                continue
+            if only_images and entry.suffix.lower() not in IMAGE_EXTS:
+                continue
+            if entry not in self.rn_files:
+                self.rn_files.append(entry)
+                added += 1
+        self.rn_refresh_preview()
+        self.rn_status.config(text=f"Added {added} file(s).")
+
+    def rn_clear(self):
+        self.rn_files.clear()
+        self.rn_refresh_preview()
+
+    def rn_remove_selected(self):
+        for idx in sorted((self.rn_tree.index(i) for i in self.rn_tree.selection()), reverse=True):
+            del self.rn_files[idx]
+        self.rn_refresh_preview()
+
+    def rn_apply(self):
+        if not self.rn_files:
+            messagebox.showinfo("No files", "Add some files or a folder first.")
+            return
+        self._rn_sync_engine()
+        planned = plan_renames(self.rn_files, self.rn_engine)
+        if not planned:
+            messagebox.showinfo("Nothing to rename", "No files need renaming with the current options.")
+            return
+        if not messagebox.askyesno(
+                "Confirm rename",
+                f"Rename {len(planned)} file(s)?\nOnly the last batch can be undone."):
+            return
+
+        errors = []
+        batch = []
+        for old_path, new_path in planned:
+            try:
+                old_path.replace(new_path)
+                batch.append((new_path, old_path))
+            except OSError as ex:
+                errors.append(f"{old_path.name}: {ex}")
+
+        self.rn_last_batch = batch
+        save_undo_log(batch)
+        rename_map = {old: new for (new, old) in batch}
+        self.rn_files = list(dict.fromkeys(rename_map.get(f, f) for f in self.rn_files))
+        status = f"Renamed {len(batch)} file(s)."
+        if errors:
+            status += f" {len(errors)} error(s)."
+            messagebox.showerror("Some renames failed", "\n".join(errors[:20]))
+        self.rn_status.config(text=status)
+        self.rn_refresh_preview()
+
+    def rn_undo(self):
+        if not self.rn_last_batch:
+            messagebox.showinfo("Nothing to undo", "No rename batch to undo.")
+            return
+        errors = []
+        reverted = 0
+        for new_path, old_path in reversed(self.rn_last_batch):
+            try:
+                if new_path.exists():
+                    new_path.replace(old_path)
+                    reverted += 1
+            except OSError as ex:
+                errors.append(f"{new_path.name}: {ex}")
+        rename_map = {new: old for (new, old) in self.rn_last_batch}
+        self.rn_files = [rename_map.get(f, f) for f in self.rn_files]
+        self.rn_last_batch = []
+        save_undo_log([])
+        self.rn_refresh_preview()
+        status = f"Undid {reverted} rename(s)."
+        if errors:
+            status += f" {len(errors)} error(s)."
+            messagebox.showerror("Some undo steps failed", "\n".join(errors[:20]))
+        self.rn_status.config(text=status)
 
 
 if __name__ == "__main__":
